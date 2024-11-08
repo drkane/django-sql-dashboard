@@ -3,7 +3,6 @@ import enum
 import json
 import re
 import urllib.parse
-from collections import namedtuple
 
 from django.core import signing
 

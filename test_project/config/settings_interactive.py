@@ -4,7 +4,8 @@
 # tinker with interactively. These Django settings can be
 # useful when we want to do that.
 
-from .settings import *
+from .settings import *  # noqa: F403
+from .settings import DATABASES
 
 # Just have our dashboard use the exact same credentials for
 # our database, there's no need to bother with read-only

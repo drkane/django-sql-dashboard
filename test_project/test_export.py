@@ -81,7 +81,19 @@ def test_export_json(admin_client, saved_dashboard, settings, json_disabled):
     assert response.json() == {
         "title": "Test dashboard",
         "queries": [
-            {"sql": "select 11 + 33", "rows": [{"?column?": 44}]},
-            {"sql": "select 22 + 55", "rows": [{"?column?": 77}]},
+            {
+                "sql": "select 11 + 33",
+                "rows": [{"?column?": 44}],
+                "settings": {},
+                "title": "",
+                "description": "",
+            },
+            {
+                "sql": "select 22 + 55",
+                "rows": [{"?column?": 77}],
+                "settings": {},
+                "title": "",
+                "description": "",
+            },
         ],
     }

@@ -1,4 +1,3 @@
-import os
 from pathlib import Path
 
 import dj_database_url
@@ -99,6 +98,3 @@ USE_TZ = True
 STATIC_URL = "/static/"
 
 LOGIN_URL = "/admin/login/"
-
-
-DASHBOARD_ENABLE_FULL_EXPORT = True

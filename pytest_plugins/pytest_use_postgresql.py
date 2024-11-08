@@ -1,4 +1,6 @@
 import os
+import signal
+
 import pytest
 from dj_database_url import parse
 from django.conf import settings
@@ -6,7 +8,21 @@ from testing.postgresql import Postgresql
 
 postgres = os.environ.get("POSTGRESQL_PATH")
 initdb = os.environ.get("INITDB_PATH")
-_POSTGRESQL = Postgresql(postgres=postgres, initdb=initdb)
+
+
+# tweak for windows
+class PostgresqlWindows(Postgresql):
+    terminate_signal = signal.SIGINT
+
+    def terminate(self, *args):
+        super(Postgresql, self).terminate()
+
+
+_POSTGRESQL = PostgresqlWindows(
+    postgres=postgres,
+    initdb=initdb,
+    initdb_args="-U postgres -A trust --encoding=utf8",
+)
 
 
 @pytest.hookimpl(tryfirst=True)

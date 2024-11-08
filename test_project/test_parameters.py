@@ -1,9 +1,6 @@
 from urllib.parse import urlencode
 
-import pytest
-from django.core import signing
 
-from django_sql_dashboard.models import Dashboard
 from django_sql_dashboard.utils import sign_sql
 
 

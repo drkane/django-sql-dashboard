@@ -1,3 +1,69 @@
-[tool.isort]
-profile = "black"
-multi_line_output = 3
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "django-sql-dashboard"
+dynamic = ["version"]
+description = "Django app for building dashboards using raw SQL queries"
+readme = "README.md"
+dependencies = ["Django>=3.0", "markdown", "bleach"]
+requires-python = ">=3.9"
+authors = [{ name = "Simon Willison" }]
+license = { file = "LICENSE" }
+
+[project.urls]
+Homepage = "https://github.com/simonw/django-sql-dashboard"
+Documentation = "https://django-sql-dashboard.datasette.io/"
+Issues = "https://github.com/simonw/django-sql-dashboard/issues"
+CI = "https://github.com/simonw/django-sql-dashboard/actions"
+Changelog = "https://github.com/simonw/django-sql-dashboard/releases"
+
+[project.optional-dependencies]
+test = [
+    "ruff>=0.7.3",
+    "psycopg2",
+    "pytest",
+    "pytest-django==4.2.0",
+    "pytest-pythonpath",
+    "dj-database-url",
+    "testing.postgresql",
+    "beautifulsoup4",
+    "html5lib",
+]
+
+[tool.hatch.version]
+path = "django_sql_dashboard/__init__.py"
+
+[tool.hatch.build.targets.sdist]
+include = ["django_sql_dashboard"]
+
+[tool.hatch.envs.default]
+features = ["test"]
+
+[tool.setuptools]
+packages = ["django_sql_dashboard"]
+
+[tool.setuptools.dynamic]
+version = { attr = "django_sql_dashboard.__version__" }
+
+[tool.hatch.envs.default.scripts]
+serve = "python test_project/manage.py runserver {args}"
+manage = "python test_project/manage.py {args}"
+test = "pytest django_sql_dashboard test_project {args}"
+test-cov = "coverage run -m pytest django_sql_dashboard test_project"
+cov-report = ["- coverage combine", "coverage report"]
+cov = ["test-cov", "cov-report"]
+lint = ["ruff format . --check", "ruff check ."]
+
+[tool.setuptools.package-data]
+django_sql_dashboard = [
+    "templates/django_sql_dashboard/*.html",
+    "templates/django_sql_dashboard/widgets/*.html",
+    "migrations/*.py",
+    "templatetags/*.py",
+]
+
+[tool.pytest.ini_options]
+addopts = "-p pytest_use_postgresql"
+DJANGO_SETTINGS_MODULE = "test_project.config.settings"
