@@ -312,21 +312,37 @@ def _dashboard_index(
                             "duration_ms": duration_ms,
                             "templates": templates,
                             "query": query_object,
-                            "view_query": reverse(
-                                "django_sql_dashboard-dashboard_query",
-                                args=(dashboard.slug, query_object.pk),
+                            "view_query": (
+                                reverse(
+                                    "django_sql_dashboard-dashboard_query",
+                                    args=(dashboard.slug, query_object.pk),
+                                )
+                                if dashboard
+                                else None
                             ),
-                            "export_csv": reverse(
-                                "django_sql_dashboard-dashboard_query_csv",
-                                args=(dashboard.slug, query_object.pk),
+                            "export_csv": (
+                                reverse(
+                                    "django_sql_dashboard-dashboard_query_csv",
+                                    args=(dashboard.slug, query_object.pk),
+                                )
+                                if dashboard
+                                else None
                             ),
-                            "export_tsv": reverse(
-                                "django_sql_dashboard-dashboard_query_tsv",
-                                args=(dashboard.slug, query_object.pk),
+                            "export_tsv": (
+                                reverse(
+                                    "django_sql_dashboard-dashboard_query_tsv",
+                                    args=(dashboard.slug, query_object.pk),
+                                )
+                                if dashboard
+                                else None
                             ),
-                            "export_json": reverse(
-                                "django_sql_dashboard-dashboard_query_json",
-                                args=(dashboard.slug, query_object.pk),
+                            "export_json": (
+                                reverse(
+                                    "django_sql_dashboard-dashboard_query_json",
+                                    args=(dashboard.slug, query_object.pk),
+                                )
+                                if dashboard
+                                else None
                             ),
                         }
                     )
