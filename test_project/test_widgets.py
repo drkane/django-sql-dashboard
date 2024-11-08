@@ -2,7 +2,6 @@ from urllib.parse import parse_qsl
 
 import pytest
 from bs4 import BeautifulSoup
-from django.core import signing
 
 from django_sql_dashboard.models import Dashboard
 from django_sql_dashboard.utils import unsign_sql

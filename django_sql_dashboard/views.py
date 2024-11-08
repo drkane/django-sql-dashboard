@@ -17,10 +17,13 @@ from django.http.response import (
     StreamingHttpResponse,
 )
 from django.shortcuts import get_object_or_404, render
-from django.template.loader import TemplateDoesNotExist, get_template, select_template
+from django.template.loader import TemplateDoesNotExist, get_template
+from django.urls import reverse
+from django.utils.text import slugify
 
 from .models import Dashboard
 from .utils import (
+    OutputMode,
     apply_sort,
     check_for_base64_upgrade,
     displayable_rows,
@@ -136,7 +139,7 @@ def _dashboard_index(
     too_long_so_use_post=False,
     template="django_sql_dashboard/dashboard.html",
     extra_context=None,
-    json_mode=False,
+    output_mode=OutputMode.HTML,
 ):
     query_results = []
     alias = getattr(settings, "DASHBOARD_DB_ALIAS", "dashboard")
@@ -257,7 +260,7 @@ def _dashboard_index(
                     cursor.execute(sql, parameter_values)
                     try:
                         rows = list(cursor.fetchmany(row_limit + 1))
-                    except ProgrammingError as e:
+                    except ProgrammingError:
                         rows = [{"statusmessage": str(cursor.statusmessage)}]
                     duration_ms = (time.perf_counter() - start) * 1000.0
                 except Exception as e:
@@ -309,6 +312,22 @@ def _dashboard_index(
                             "duration_ms": duration_ms,
                             "templates": templates,
                             "query": query_object,
+                            "view_query": reverse(
+                                "django_sql_dashboard-dashboard_query",
+                                args=(dashboard.slug, query_object.pk),
+                            ),
+                            "export_csv": reverse(
+                                "django_sql_dashboard-dashboard_query_csv",
+                                args=(dashboard.slug, query_object.pk),
+                            ),
+                            "export_tsv": reverse(
+                                "django_sql_dashboard-dashboard_query_tsv",
+                                args=(dashboard.slug, query_object.pk),
+                            ),
+                            "export_json": reverse(
+                                "django_sql_dashboard-dashboard_query_json",
+                                args=(dashboard.slug, query_object.pk),
+                            ),
                         }
                     )
                 finally:
@@ -347,12 +366,19 @@ def _dashboard_index(
             )
         ]
 
-    if json_mode:
+    if output_mode == OutputMode.JSON:
         return JsonResponse(
             {
                 "title": title or "SQL Dashboard",
                 "queries": [
-                    {"sql": r["sql"], "rows": r["rows"]} for r in query_results
+                    {
+                        "sql": r["sql"],
+                        "rows": r["rows"],
+                        "title": r["query"].title,
+                        "description": r["query"].description,
+                        "settings": r["query"].settings,
+                    }
+                    for r in query_results
                 ],
             },
             json_dumps_params={
@@ -362,6 +388,16 @@ def _dashboard_index(
                 ),
             },
         )
+
+    if output_mode in (OutputMode.CSV, OutputMode.TSV):
+        if len(query_results) == 1:
+            return export_sql_results(
+                request,
+                format=output_mode.value,
+                sql=query_results[0]["sql"],
+                filename=slugify(query_results[0]["query"].title),
+            )
+        return HttpResponseForbidden("Export is only available for a single query")
 
     context = {
         "title": title or "SQL Dashboard",
@@ -400,10 +436,10 @@ def dashboard_json(request, slug):
     disable_json = getattr(settings, "DASHBOARD_DISABLE_JSON", None)
     if disable_json:
         return HttpResponseForbidden("JSON export is disabled")
-    return dashboard(request, slug, json_mode=True)
+    return dashboard(request, slug, output_mode=OutputMode.JSON)
 
 
-def dashboard(request, slug, json_mode=False):
+def dashboard(request, slug, output_mode=OutputMode.HTML):
     dashboard = get_object_or_404(Dashboard, slug=slug)
     # Can current user see it, based on view_policy?
     view_policy = dashboard.view_policy
@@ -439,27 +475,30 @@ def dashboard(request, slug, json_mode=False):
         description=dashboard.description,
         dashboard=dashboard,
         template="django_sql_dashboard/saved_dashboard.html",
-        json_mode=json_mode,
+        output_mode=output_mode,
     )
 
 
 non_alpha_re = re.compile(r"[^a-zA-Z0-9]")
 
 
-def export_sql_results(request):
-    export_key = [k for k in request.POST.keys() if k.startswith("export_")][0]
-    _, format, sql_index = export_key.split("_")
-    assert format in ("csv", "tsv")
-    sqls = request.POST.getlist("sql")
-    sql = sqls[int(sql_index)]
+def export_sql_results(request, format=None, sql=None, filename=None):
+    if format is None or sql is None:
+        export_key = [k for k in request.POST.keys() if k.startswith("export_")][0]
+        _, format, sql_index = export_key.split("_")
+        assert format in ("csv", "tsv")
+        sqls = request.POST.getlist("sql")
+        sql = sqls[int(sql_index)]
     parameter_values = {
         parameter: request.POST.get(parameter, "")
         for parameter in extract_named_parameters(sql)
     }
     alias = getattr(settings, "DASHBOARD_DB_ALIAS", "dashboard")
+
     # Decide on filename
-    sql_hash = hashlib.sha256(sql.encode("utf-8")).hexdigest()[:6]
-    filename = non_alpha_re.sub("-", sql.lower()[:30]) + sql_hash
+    if not filename:
+        sql_hash = hashlib.sha256(sql.encode("utf-8")).hexdigest()[:6]
+        filename = non_alpha_re.sub("-", sql.lower()[:30]) + sql_hash
 
     filename_plus_ext = filename + "." + format
 
@@ -510,3 +549,65 @@ def export_sql_results(request):
     )
     response["Content-Disposition"] = 'attachment; filename="' + filename_plus_ext + '"'
     return response
+
+
+def dashboard_query(request, slug, id, output_mode=OutputMode.HTML):
+    dashboard = get_object_or_404(Dashboard, slug=slug)
+    query = get_object_or_404(dashboard.queries, pk=id)
+    # Can current user see it, based on view_policy?
+    view_policy = dashboard.view_policy
+    owner = dashboard.owned_by
+    denied = HttpResponseForbidden("You cannot access this dashboard")
+    denied["cache-control"] = "private"
+    if view_policy == Dashboard.ViewPolicies.PRIVATE:
+        if request.user != owner:
+            return denied
+    elif view_policy == Dashboard.ViewPolicies.LOGGEDIN:
+        if not request.user.is_authenticated:
+            return denied
+    elif view_policy == Dashboard.ViewPolicies.GROUP:
+        if (not request.user.is_authenticated) or not (
+            request.user == owner
+            or request.user.groups.filter(pk=dashboard.view_group_id).exists()
+        ):
+            return denied
+    elif view_policy == Dashboard.ViewPolicies.STAFF:
+        if (not request.user.is_authenticated) or (
+            request.user != owner and not request.user.is_staff
+        ):
+            return denied
+    elif view_policy == Dashboard.ViewPolicies.SUPERUSER:
+        if (not request.user.is_authenticated) or (
+            request.user != owner and not request.user.is_superuser
+        ):
+            return denied
+    return _dashboard_index(
+        request,
+        sql_queries=[query.sql],
+        title=query.title if query.title else dashboard.title,
+        description=query.description,
+        dashboard=dashboard,
+        template="django_sql_dashboard/saved_dashboard.html",
+        output_mode=output_mode,
+    )
+
+
+def dashboard_query_json(request, slug, id):
+    disable_json = getattr(settings, "DASHBOARD_DISABLE_JSON", None)
+    if disable_json:
+        return HttpResponseForbidden("JSON export is disabled")
+    return dashboard_query(request, slug, id, output_mode=OutputMode.JSON)
+
+
+def dashboard_query_csv(request, slug, id):
+    disable_json = getattr(settings, "DASHBOARD_DISABLE_CSV", None)
+    if disable_json:
+        return HttpResponseForbidden("CSV export is disabled")
+    return dashboard_query(request, slug, id, output_mode=OutputMode.CSV)
+
+
+def dashboard_query_tsv(request, slug, id):
+    disable_json = getattr(settings, "DASHBOARD_DISABLE_TSV", None)
+    if disable_json:
+        return HttpResponseForbidden("TSV export is disabled")
+    return dashboard_query(request, slug, id, output_mode=OutputMode.TSV)

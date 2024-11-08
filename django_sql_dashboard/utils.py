@@ -1,4 +1,5 @@
 import binascii
+import enum
 import json
 import re
 import urllib.parse
@@ -28,6 +29,13 @@ def unsign_sql(signed_sql, try_object=False):
             return value, False
         except ValueError:
             return signed_sql, False
+
+
+class OutputMode(enum.Enum):
+    HTML = "html"
+    JSON = "json"
+    CSV = "csv"
+    TSV = "tsv"
 
 
 class Row:

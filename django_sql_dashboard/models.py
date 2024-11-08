@@ -166,6 +166,16 @@ class DashboardQuery(models.Model):
     def __str__(self):
         return self.sql
 
+    def get_absolute_url(self):
+        return reverse(
+            "django_sql_dashboard-dashboard_query", args=[self.dashboard.slug, self.id]
+        )
+
+    def get_edit_url(self):
+        return reverse(
+            "admin:django_sql_dashboard_dashboardquery_change", args=(self.id,)
+        )
+
     class Meta:
         verbose_name_plural = "Dashboard queries"
         order_with_respect_to = "dashboard"
